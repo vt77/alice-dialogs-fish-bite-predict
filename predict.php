@@ -9,7 +9,6 @@ use AliceDialogs\ServiceLocator;
 use function AliceDialogsFishPredict\Utils\build_answer_vars;
 use Monolog;
 
-
 $logger = new Monolog\Logger('fish-predict');
 $logger->pushHandler(new Monolog\Handler\StreamHandler('logs/predication.log', Monolog\Logger::WARNING));
 $logger->pushHandler(new Monolog\Handler\StreamHandler('php://stdout', Monolog\Logger::DEBUG));
@@ -129,14 +128,16 @@ if (is_null($intent))
 }else{
     $session = $processor->parse_fish_predict_intent($intent);
     $phrases =  $DIALOGS[$session['code']];
+    $logger->debug("Messages : ",$phrases);
     $message = $phrases['message'][0];
     $question = $phrases['message'][1];
     $template = is_array($message) ? 
-            implode('.',array_map(function ($m) use($messages_ru) {$messages_ru[$m];},$message)) 
-            : $messages_ru[$message];
+            implode('.',array_map(function ($m) use($messages_ru) {return $messages_ru[$m];},$message)) 
+            : $messages_ru[$message];    
     $template .= $messages_ru[$question];
     $session['cmd'] = $question == QUESTION_WANT_KNOW_CONDITIONS ? 'factor':'predict';
     $session['where'] = 'netanya';
+    $logger->debug("Template : ",[$template]);
     $vars = build_answer_vars($processor->build_fish_predict($session), $template );
     $answer = strtr($template,$vars);
 }
@@ -144,4 +145,3 @@ if (is_null($intent))
 header("Content-type: application/json; charset=utf-8");
 $response = $request->build_response($answer,$session);
 print(json_encode($response,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT));
-
