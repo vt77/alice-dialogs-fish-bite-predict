@@ -1,0 +1,25 @@
+{
+    "name": "vt77/alice-dialogs-fish-predict",
+    "description": "ALice dialogs integration for fish bite prediction",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "AliceDialogsFishPredict\\": "src/AliceDialogsFishPredict",
+	    "AliceDialogs\\" : "src/"
+	},
+	"files": ["src/AliceDialogsFishPredict/Utils.php"]
+    },
+    "authors": [
+        {
+            "name": "Daniel",
+            "email": "daniel@vt77.com"
+        }
+    ],
+    "require": {
+        "monolog/monolog": "^2.9"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    }
+}
