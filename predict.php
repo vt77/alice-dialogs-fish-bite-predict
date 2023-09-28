@@ -7,11 +7,12 @@ use AliceDialogsFishPredict\PredictionFish;
 use AliceDialogs\AliceDialogs;
 use AliceDialogs\ServiceLocator;
 use function AliceDialogsFishPredict\Utils\build_answer_vars;
-use Monolog;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
 
-$logger = new Monolog\Logger('fish-predict');
-$logger->pushHandler(new Monolog\Handler\StreamHandler('logs/predication.log', Monolog\Logger::WARNING));
-$logger->pushHandler(new Monolog\Handler\StreamHandler('php://stdout', Monolog\Logger::DEBUG));
+$logger = new Logger('fish-predict');
+$logger->pushHandler(new StreamHandler('logs/predication.log', Logger::INFO));
+$logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 
 ServiceLocator::set('logger',$logger);
 $processor = new AliceDialogsFishPredict();
@@ -22,6 +23,8 @@ const MESSAGE_FORECAST_FIRST = "MESSAGE_FORECAST_FIRST";
 const MESSAGE_FORECAST_SECOND = "MESSAGE_FORECAST_SECOND";
 const QUESTION_WANT_KNOW_CONDITIONS = "QUESTION_WANT_KNOW_CONDITIONS";
 const QUESTION_WANT_KNOW_BEST_PERIOD = "UESTION_WANT_KNOW_BEST_PERIOD";
+const MESSAGE_EMPTY = "MESSAGE_EMPTY";
+const MESSAGE_ERROR = "MESSAGE_ERROR";
 
 $messages_ru = [
     MESSAGE_BEST_FIRST => "Лучшее время для ловли {best_fish_1} {best_period_1}.Прогноз клёва {best_predict_1} процентов.",
@@ -30,16 +33,17 @@ $messages_ru = [
     MESSAGE_FORECAST_SECOND => "для  {best_fish_2} {best_predict_2}.",
     QUESTION_WANT_KNOW_CONDITIONS => "Хотите узнать какие факторы будут влиять на клёв {best_period_1} ?",
     QUESTION_WANT_KNOW_BEST_PERIOD => "Хотите узнать когда лучшее время для ловли {best_fish_2} {best_day_1} ?",
+    MESSAGE_EMPTY => "Я могу рассказать прогноз клёва на ближайшие три дня для хищной или белой рыбы. Какой прогноз вас интересует ?",
+    MESSAGE_ERROR => "Я не смогла разобрать запрос. Попробуйте позже !"
 ];
-
 
 
 const MESSAGE_EXACT_FISH_BEST_PERIOD = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_CONDITIONS ];
 const MESSAGE_ANY_FISH_BEST_PERIOD = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
-const MESSAGE_EXACT_FISH_EXACT_PERIOD = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_CONDITIONS ];
-const MESSAGE_ANY_FISH_EXACT_PERIOD = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
+const MESSAGE_EXACT_FISH_EXACT_PERIOD = [MESSAGE_FORECAST_FIRST, QUESTION_WANT_KNOW_CONDITIONS ];
+const MESSAGE_ANY_FISH_EXACT_PERIOD = [ [MESSAGE_FORECAST_FIRST, MESSAGE_FORECAST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
 const MESSAGE_EXACT_FISH_EXACT_DAY = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_BEST_PERIOD ];
-const MESSAGE_ANY_FISH_EXACT_DAY = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_BEST_PERIOD ];
+const MESSAGE_ANY_FISH_EXACT_DAY = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
 
 
 $DIALOGS = [
@@ -109,15 +113,22 @@ else
 
 $request = AliceDialogs::parse($json);
 
-$intent =  $request->intenet('fish_predict');
+$intent =  $request->intenet(['fish_predict']);
 $session = false;
 if (is_null($intent))
 {
-    $answer = "Я не смогла разобрать запрос. Попробуйте позже !";
-}else if($intent == AliceDialogs::REJECT)
-{
+    $answer = $messages_ru[MESSAGE_ERROR];
+
+}else if($intent == AliceDialogs::EMPTY){
+
+    $answer = $messages_ru[MESSAGE_EMPTY];
+
+}else if($intent == AliceDialogs::REJECT){
+
     $answer = "Рада помочь. Обращайтесь ещё";
+
 }else if($intent == AliceDialogs::CONFIRM){
+
     $prev_session = $request->session();
     if($prev_session['cmd']=='factor'){
         $answer = $processor.build_fish_predict_factors($prev_session);
@@ -132,7 +143,7 @@ if (is_null($intent))
     $message = $phrases['message'][0];
     $question = $phrases['message'][1];
     $template = is_array($message) ? 
-            implode('.',array_map(function ($m) use($messages_ru) {return $messages_ru[$m];},$message)) 
+            implode(' ',array_map(function ($m) use($messages_ru) {return $messages_ru[$m];},$message)) 
             : $messages_ru[$message];    
     $template .= $messages_ru[$question];
     $session['cmd'] = $question == QUESTION_WANT_KNOW_CONDITIONS ? 'factor':'predict';

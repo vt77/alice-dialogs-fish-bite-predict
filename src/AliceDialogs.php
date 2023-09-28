@@ -8,6 +8,7 @@ class AliceDialogs{
 	const REJECT = 1;
 	const CONFIRM = 2;
 	const ERROR = 3;
+	const EMPTY = 4;
 
 	var $_request = null;
 
@@ -52,8 +53,11 @@ class AliceDialogs{
 		return $response;	
 	}
 
-	public function intenet($key=false)
+	public function intenet($keys)
 	{
+		if($this->_request == null)
+			return null;
+
 		$intents = $this->_request['request']['nlu']['intents'];
 		if ( key_exists('YANDEX.REJECT',$intents) )
 			return $this::REJECT;
@@ -61,10 +65,12 @@ class AliceDialogs{
 		if ( key_exists('YANDEX.CONFIRM',$intents) )
 			return $this::REJECT;
 
-		if($key)
-			return key_exists($key,$intents) ? $intents[$key]['slots'] : null;
 
-		return  $intents;		
+		foreach($keys as $intent_type)
+			if(key_exists($intent_type,$intents))
+					return $intents[$intent_type]['slots'];
+
+		return $this::EMPTY;
 	}
 };
 

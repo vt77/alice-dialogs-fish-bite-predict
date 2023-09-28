@@ -25,9 +25,9 @@ class PredictionDay{
 }
 
 class PredictionFish{
+    const ANY = 0x0;
     const WHITE = 0x1;
     const PREDATOR = 0x2;
-    const ANY = 0x3;
 }
 
 
@@ -150,6 +150,9 @@ class AliceDialogsFishPredict{
 
     public function parse_fish_predict_intent($intent)
     {
+
+        $this->_logger->debug("[PARSEINTENT]",$intent);
+
         # Defaults
         $vars = [
             'code' => PredictionDay::TODAY,
