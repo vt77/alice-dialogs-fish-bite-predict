@@ -1,6 +1,10 @@
 <?php
 namespace AliceDialogs;
 
+use Monolog;
+
+$logger = new Monolog\Logger(__NAMESPACE__);
+
 class AliceDialogs{
 
 	var $session = False;
@@ -55,16 +59,25 @@ class AliceDialogs{
 
 	public function intenet($keys)
 	{
+
+		global $logger;
+
 		if($this->_request == null)
 			return null;
 
 		$intents = $this->_request['request']['nlu']['intents'];
+		$logger->debug("[DIALOG][INTENTS]",$intents);
 		if ( key_exists('YANDEX.REJECT',$intents) )
+		{
+			$logger->info("[DIALOG][INTENTS] Reject");
 			return $this::REJECT;
+		}
 
 		if ( key_exists('YANDEX.CONFIRM',$intents) )
-			return $this::REJECT;
-
+		{
+			$logger->info("[DIALOG][INTENTS] Confirm");
+			return $this::CONFIRM;
+		}
 
 		foreach($keys as $intent_type)
 			if(key_exists($intent_type,$intents))

@@ -33,6 +33,7 @@ class PredictionFish{
 
 class AliceDialogsFishPredictException extends \Exception{
     const PREDICT_NOT_AVALIABLE = 1;
+    const FACTORS_NOT_AVALIABLE = 2;
     const GENERAL_ERROR = 2;
 }
 
@@ -148,6 +149,18 @@ class AliceDialogsFishPredict{
             $this->_dataLoader = new DataLoader("dsn=file");            
     }
 
+
+    public function session_to_intent($session)
+    {
+        $intent = [];
+        $intent['cmd'] = $session['cmd'] ?? 'predict';
+        $intent['what']['value'] = $session['what'] ?? 'any';
+        $intent['when']['value'] = $session['when'] ?? 'today';
+        $intent['daytime']['value'] = $session['daytime'] ?? 'any';
+        return $intent;
+    }
+
+
     public function parse_fish_predict_intent($intent)
     {
 
@@ -232,5 +245,11 @@ class AliceDialogsFishPredict{
         if($data['nonpred']['predict'] > $data['pred']['predict'])
             return [$data['nonpred'],$data['pred']];
         return [$data['pred'],$data['nonpred']];
+    }
+
+
+    function build_fish_predict_factors($intent)
+    {
+        throw new AliceDialogsFishPredictException("No factors avaliable",AliceDialogsFishPredictException::FACTORS_NOT_AVALIABLE);
     }
 }

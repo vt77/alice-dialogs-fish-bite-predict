@@ -4,6 +4,7 @@ use AliceDialogsFishPredict\AliceDialogsFishPredict;
 use AliceDialogsFishPredict\PredictionPeriod;
 use AliceDialogsFishPredict\PredictionDay;
 use AliceDialogsFishPredict\PredictionFish;
+use AliceDialogsFishPredict\AliceDialogsFishPredictException;
 use AliceDialogs\AliceDialogs;
 use AliceDialogs\ServiceLocator;
 use function AliceDialogsFishPredict\Utils\build_answer_vars;
@@ -24,19 +25,24 @@ const MESSAGE_FORECAST_SECOND = "MESSAGE_FORECAST_SECOND";
 const QUESTION_WANT_KNOW_CONDITIONS = "QUESTION_WANT_KNOW_CONDITIONS";
 const QUESTION_WANT_KNOW_BEST_PERIOD = "UESTION_WANT_KNOW_BEST_PERIOD";
 const MESSAGE_EMPTY = "MESSAGE_EMPTY";
-const MESSAGE_ERROR = "MESSAGE_ERROR";
+const MESSAGE_ERROR_GENERAL = "MESSAGE_ERROR_GENERAL";
+const MESSAGE_ERROR_REQUEST = "MESSAGE_ERROR_REQUEST";
+const MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE = "MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE";
+const MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE = "MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE";
 
 $messages_ru = [
+    MESSAGE_EMPTY => "Я могу рассказать прогноз клёва на ближайшие три дня для хищной или белой рыбы. Рассказать прогноз на сегодня ?",
+    MESSAGE_ERROR_REQUEST => "Я не смогла разобрать запрос. Ещё раз !", 
+    MESSAGE_ERROR_GENERAL => "Что-то пошло не так. Я уже отправила репорт разработчику. Попробуйте позже !", 
     MESSAGE_BEST_FIRST => "Лучшее время для ловли {best_fish_1} {best_period_1}.Прогноз клёва {best_predict_1} процентов.",
     MESSAGE_BEST_SECOND => "Для {best_fish_2} лучшее время {best_period_2}. Прогноз {best_predict_2} процентов.",
     MESSAGE_FORECAST_FIRST => "Прогноз клёва на {best_period_1} для {best_fish_1} {best_predict_1} процентов.", 
     MESSAGE_FORECAST_SECOND => "для  {best_fish_2} {best_predict_2}.",
     QUESTION_WANT_KNOW_CONDITIONS => "Хотите узнать какие факторы будут влиять на клёв {best_period_1} ?",
     QUESTION_WANT_KNOW_BEST_PERIOD => "Хотите узнать когда лучшее время для ловли {best_fish_2} {best_day_1} ?",
-    MESSAGE_EMPTY => "Я могу рассказать прогноз клёва на ближайшие три дня для хищной или белой рыбы. Какой прогноз вас интересует ?",
-    MESSAGE_ERROR => "Я не смогла разобрать запрос. Попробуйте позже !"
+    MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE => "Прогноз не доступен для вашего региона. Попробуйте позже.",
+    MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE => "Я пока не знаю факторов влияющих на клёв. Попробуйте позже."
 ];
-
 
 const MESSAGE_EXACT_FISH_BEST_PERIOD = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_CONDITIONS ];
 const MESSAGE_ANY_FISH_BEST_PERIOD = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
@@ -44,7 +50,6 @@ const MESSAGE_EXACT_FISH_EXACT_PERIOD = [MESSAGE_FORECAST_FIRST, QUESTION_WANT_K
 const MESSAGE_ANY_FISH_EXACT_PERIOD = [ [MESSAGE_FORECAST_FIRST, MESSAGE_FORECAST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
 const MESSAGE_EXACT_FISH_EXACT_DAY = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_BEST_PERIOD ];
 const MESSAGE_ANY_FISH_EXACT_DAY = [ [MESSAGE_BEST_FIRST, MESSAGE_BEST_SECOND], QUESTION_WANT_KNOW_CONDITIONS ];
-
 
 $DIALOGS = [
     # Best day
@@ -104,6 +109,37 @@ $DIALOGS = [
     PredictionPeriod::EVENING | PredictionDay::PASTTOMORROW | PredictionFish::WHITE => ['message' => MESSAGE_ANY_FISH_EXACT_PERIOD],
 ];
 
+$PERDICT_ERRORS = [
+    AliceDialogsFishPredictException::PREDICT_NOT_AVALIABLE => MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE,
+    AliceDialogsFishPredictException::FACTORS_NOT_AVALIABLE => MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE,
+    AliceDialogsFishPredictException::GENERAL_ERROR => MESSAGE_ERROR_GENERAL,
+];
+
+
+
+function get_message_template(&$intent,$with_question=false)
+{
+    global $DIALOGS, $logger, $messages_ru;
+    
+    $phrases =  $DIALOGS[$intent['code']];
+    $logger->debug("Messages : ",$phrases);
+    $message = $phrases['message'][0];
+    $question = $phrases['message'][1];
+    $template = is_array($message) ? 
+            implode(' ',array_map(function ($m) use($messages_ru) {return $messages_ru[$m];},$message)) 
+            : $messages_ru[$message];    
+
+    if($with_question){ 
+        $template .= $messages_ru[$question];
+        $intent['cmd'] = $question == QUESTION_WANT_KNOW_CONDITIONS ? 'factor':'predict';
+        $logger->debug("Change intent command : ",$intent);
+    }
+
+    $logger->debug("Template : ",[$template]);
+    return $template;
+}
+
+
 // takes raw data from the request
 
 if(getenv('DEBUG') == 1)
@@ -113,44 +149,53 @@ else
 
 $request = AliceDialogs::parse($json);
 
+
+
+
 $intent =  $request->intenet(['fish_predict']);
 $session = false;
-if (is_null($intent))
-{
-    $answer = $messages_ru[MESSAGE_ERROR];
+$answer = $messages_ru[MESSAGE_ERROR_REQUEST];
 
-}else if($intent == AliceDialogs::EMPTY){
 
-    $answer = $messages_ru[MESSAGE_EMPTY];
+try {
 
-}else if($intent == AliceDialogs::REJECT){
+    switch($intent){
+        
+        case null:
+            $answer = $messages_ru[MESSAGE_ERROR_REQUEST];
+            break;
 
-    $answer = "Рада помочь. Обращайтесь ещё";
+        case  AliceDialogs::EMPTY:
+            $session = ['when' => 'today'];
+            $answer = $messages_ru[MESSAGE_EMPTY];    
+            break;
 
-}else if($intent == AliceDialogs::CONFIRM){
+        case  AliceDialogs::REJECT:
+            $answer = "Рада помочь. Обращайтесь ещё";
+            break;
 
-    $prev_session = $request->session();
-    if($prev_session['cmd']=='factor'){
-        $answer = $processor.build_fish_predict_factors($prev_session);
-    }else {
-        $answer = $processor.build_fish_predict($prev_session);
+        case AliceDialogs::CONFIRM:
+            $intent = $processor->session_to_intent($request->session());
+            if($intent['cmd']=='factor'){
+                $answer = $processor->build_fish_predict_factors($intent);
+                break;
+            }
+            // Otherwise command == predict, continue to default processor
+            $with_question = false;
+        default:
+            $session = $processor->parse_fish_predict_intent($intent);
+            $template = get_message_template($session,isset($with_question) ? $with_question : true);
+            $session['where'] = 'netanya';
+            $vars = build_answer_vars($processor->build_fish_predict($session), $template );
+            $answer = strtr($template,$vars);
     }
 
-}else{
-    $session = $processor->parse_fish_predict_intent($intent);
-    $phrases =  $DIALOGS[$session['code']];
-    $logger->debug("Messages : ",$phrases);
-    $message = $phrases['message'][0];
-    $question = $phrases['message'][1];
-    $template = is_array($message) ? 
-            implode(' ',array_map(function ($m) use($messages_ru) {return $messages_ru[$m];},$message)) 
-            : $messages_ru[$message];    
-    $template .= $messages_ru[$question];
-    $session['cmd'] = $question == QUESTION_WANT_KNOW_CONDITIONS ? 'factor':'predict';
-    $session['where'] = 'netanya';
-    $logger->debug("Template : ",[$template]);
-    $vars = build_answer_vars($processor->build_fish_predict($session), $template );
-    $answer = strtr($template,$vars);
+}catch(AliceDialogsFishPredictException $exp){
+    $logger->error($exp->getMessage());
+    $answer =  $messages_ru[$PERDICT_ERRORS[$exp->getCode()]];
+}catch(Exception $exp){
+    $logger->error($exp->getMessage());
+    $answer =  $messages_ru[MESSAGE_ERROR_GENERAL];
 }
 
 header("Content-type: application/json; charset=utf-8");
