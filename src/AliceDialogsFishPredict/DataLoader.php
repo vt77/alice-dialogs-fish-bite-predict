@@ -10,6 +10,7 @@ $logger = new Monolog\Logger(__NAMESPACE__);
 
 interface DataLoggerInterface{
     public function load($location, $params);
+    public function load_factors($intent);
 }
 
 
@@ -38,4 +39,12 @@ class DataLoader{
         if($this->_driver == 'file')
             return $this->load_from_file($location,$params);
     }
+
+
+    public function load_factors()
+    {
+        $filename = sprintf("%s/../factors.yaml",DATAPATH);
+        return yaml_parse_file($filename)['factors'];
+    }
+
 };

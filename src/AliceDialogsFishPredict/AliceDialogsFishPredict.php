@@ -34,7 +34,7 @@ class PredictionFish{
 class AliceDialogsFishPredictException extends \Exception{
     const PREDICT_NOT_AVALIABLE = 1;
     const FACTORS_NOT_AVALIABLE = 2;
-    const GENERAL_ERROR = 2;
+    const GENERAL_ERROR = 3;
 }
 
 class DayTime
@@ -222,12 +222,14 @@ class AliceDialogsFishPredict{
                 {
                     $data['pred']['period'] = DayTime::timestamp_to_period($pr['timestamp']);
                     $data['pred']['predict'] = intval($pr['predator']);
+                    $data['pred']['factors'] = $pr['factors']['predatory'];
                 }
 
                 if( $pr['friedfish'] > $data['nonpred']['predict'])
                 {
                     $data['nonpred']['period'] = DayTime::timestamp_to_period($pr['timestamp']);
                     $data['nonpred']['predict'] = intval($pr['friedfish']);
+                    $data['nonpred']['factors'] = $pr['factors']['non-predatory'];
                 }
                 $found = true;
         }
@@ -250,6 +252,50 @@ class AliceDialogsFishPredict{
 
     function build_fish_predict_factors($intent)
     {
-        throw new AliceDialogsFishPredictException("No factors avaliable",AliceDialogsFishPredictException::FACTORS_NOT_AVALIABLE);
+        $predicate = $this->build_fish_predict($intent);
+        if(!key_exists('factors',$predicate[0]) || empty($predicate[0]['factors']))
+            throw new AliceDialogsFishPredictException("No factors avaliable",AliceDialogsFishPredictException::FACTORS_NOT_AVALIABLE);
+        $factors = $this->_dataLoader->load_factors();
+        foreach($predicate as $i=>$pr)
+        {
+            #convert factors to strings
+            $positive = array_filter(array_map(function($f) use ($factors)
+            {
+                global $logger;
+                $logger->debug("Process positive factor : " . $f);
+                if(!key_exists($f,$factors['positive']) )
+                {
+                    $logger->warning("Factor key not found :" . $f);
+                    return false;   
+                }
+
+                return $factors['positive'][$f]; 
+            },$pr['factors']['positive']),'is_array');
+
+            $negative = array_filter(array_map(function($f) use ($factors)
+            {
+                global $logger;
+                $logger->debug("Process negative factor : " . $f);
+                if(!key_exists($f,$factors['negative']) )
+                {
+                    $logger->warning("Factor key not found :" . $f);
+                    return false;   
+                }
+
+                return $factors['negative'][$f];
+            },$pr['factors']['negative']),'is_array');
+
+
+            $sorter = function ($arr,$max_num=2){
+                uasort($arr, function($a,$b){
+                    return $a[0] < $b[0]; 
+                });
+                return array_slice(array_map(function($a){return $a[1];},$arr),0,$max_num);
+            };
+
+            $predicate[$i]['factors']['positive'] = $sorter($positive,2);
+            $predicate[$i]['factors']['negative'] = $sorter($negative,2);
+        }
+        return $predicate;
     }
 }

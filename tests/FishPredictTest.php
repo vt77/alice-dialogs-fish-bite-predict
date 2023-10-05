@@ -13,11 +13,13 @@ use AliceDialogsFishPredict\PredictionDay;
 use AliceDialogsFishPredict\PredictionFish;
 use const AliceDialogsFishPredict\SECONDS_IN_DAY;
 use const AliceDialogsFishPredict\SECONDS_IN_PERIOD;
+use function AliceDialogsFishPredict\Utils\build_factor_vars;
 
 
-$logger = new Logger('test-fish-predict');
+$logger = new Logger('testFishPredict::Predict-fish-predict');
 #$logger->pushHandler(new StreamHandler('logs/test-predication.log', Logger::WARNING));
 $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
 
 class MockDataLoader
 {
@@ -37,7 +39,11 @@ class MockDataLoader
             self::$data[] = [
                 'timestamp' => $timestamp,
                 'predator' => self::$pred[$i*2],
-                'friedfish' => self::$pred[$i*2+1]
+                'friedfish' => self::$pred[$i*2+1],
+                'factors' => [
+                    'non-predatory' => ['positive' => ['MESSAGE_FACTOR_GOOD_MOON','NON_EXISTING_POSITIVE'],'negative' => ['MESSAGE_FACTOR_BAD_WIND_DIRECTION'] ],
+                    'predatory' =>  ['positive' => ['MESSAGE_FACTOR_GOOD_PRESSURE','MESSAGE_FACTOR_GOOD_SMALL_RAIN','MESSAGE_FACTOR_GOOD_MOON'],'negative' => [] ]
+                ]
             ];
         }
         return self::$data;
@@ -52,8 +58,22 @@ class MockDataLoader
         });
         return $data;
     }
-}
 
+    public function load_factors()
+    {
+        return [
+            "positive" => [
+                'MESSAGE_FACTOR_GOOD_SMALL_RAIN' => [10,'Good small rain'],
+                'MESSAGE_FACTOR_GOOD_PRESSURE' => [6,'Good pressure'],
+                'MESSAGE_FACTOR_GOOD_MOON' => [3,'Good moon phase'],
+
+            ],
+            "negative" => [
+                'MESSAGE_FACTOR_BAD_WIND_DIRECTION' => [10,'Bad wind dir'],
+            ]
+        ];
+    }
+}
 
 $mockDataLoader = new MockDataLoader();
 
@@ -63,6 +83,10 @@ ServiceLocator::set('dataloader',$mockDataLoader);
 
 $processor = new AliceDialogsFishPredict();
 
+
+/**
+ * @covers FishPredict::Predict
+ */
 final class TestFishpredict extends TestCase
 {
 
@@ -166,7 +190,6 @@ final class TestFishpredict extends TestCase
 
     }
 
-
     public function testDateTimeToTimeStamp()
     {
         $today_start = strtotime("today", time());
@@ -232,4 +255,58 @@ final class TestFishpredict extends TestCase
         $this->assertSame($data[1]['period'],PredictionDay::TOMORROW|PredictionPeriod::EVENING);
 
     }
+}
+
+
+
+/**
+ * @covers FishPredict::Factors
+ */
+final class TestFishFactors extends TestCase
+{
+
+    public function no_testLoadFactors()
+    {
+        global $logger, $processor;
+        $logger->debug("Start factors test");
+        $this->assertSame('test', 'fail','Wrong test data');
+    }
+
+    public function testBuildFactorsAllFish()
+    {
+        global $logger, $processor;
+
+        $predict = $processor->build_fish_predict_factors([
+            'where' => 'netanya',
+            'code' => PredictionDay::TODAY|PredictionPeriod::MORNING
+        ]);
+
+        $this->assertSame($predict[0]['fish'],PredictionFish::PREDATOR);
+        //Only two top factors actual    
+        $this->assertSame(count($predict[0]['factors']['positive']),2);
+        // Factors converted to strings   
+        $this->assertSame($predict[0]['factors']['positive'][0],'Good small rain');
+        $this->assertSame($predict[0]['factors']['positive'][1],'Good pressure');
+        // Second fish
+        $this->assertSame($predict[1]['factors']['negative'][0],'Bad wind dir');
+        $this->assertSame($predict[1]['fish'],PredictionFish::WHITE);
+    }
+
+    public function testBuildFactorVars()
+    {
+        global $logger, $processor;
+
+        $predict = $processor->build_fish_predict_factors([
+            'where' => 'netanya',
+            'code' => PredictionDay::TODAY|PredictionPeriod::MORNING
+        ]);
+
+
+        $vars = build_factor_vars($predict,'{best_period_1} for {best_fish_1} {positive_factors_1}, {negative_factors_1}. For {best_fish_2} {positive_factors_2}, {negative_factors_2}');
+        $logger->debug("Vars" , $vars);
+        $this->assertSame($vars['{best_period_1}'],'сегодня утром');
+        $this->assertSame($vars['{positive_factors_1}'],'Good small rain,Good pressure');
+        $this->assertSame($vars['{negative_factors_1}'],'');
+    }
+
 }

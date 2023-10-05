@@ -8,6 +8,7 @@ use AliceDialogsFishPredict\AliceDialogsFishPredictException;
 use AliceDialogs\AliceDialogs;
 use AliceDialogs\ServiceLocator;
 use function AliceDialogsFishPredict\Utils\build_answer_vars;
+use function AliceDialogsFishPredict\Utils\build_factor_vars;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 
@@ -29,6 +30,9 @@ const MESSAGE_ERROR_GENERAL = "MESSAGE_ERROR_GENERAL";
 const MESSAGE_ERROR_REQUEST = "MESSAGE_ERROR_REQUEST";
 const MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE = "MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE";
 const MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE = "MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE";
+const FACTOR_TEMPLATE_ALL = "FACTOR_TEMPLATE_ALL";
+const FACTOR_TEMPLATE_FISH = "FACTOR_TEMPLATE_FISH";
+
 
 $messages_ru = [
     MESSAGE_EMPTY => "Я могу рассказать прогноз клёва на ближайшие три дня для хищной или белой рыбы. Рассказать прогноз на сегодня ?",
@@ -41,7 +45,9 @@ $messages_ru = [
     QUESTION_WANT_KNOW_CONDITIONS => "Хотите узнать какие факторы будут влиять на клёв {best_period_1} ?",
     QUESTION_WANT_KNOW_BEST_PERIOD => "Хотите узнать когда лучшее время для ловли {best_fish_2} {best_day_1} ?",
     MESSAGE_PREDICT_ERROR_PREDICT_NOT_AVALIABLE => "Прогноз не доступен для вашего региона. Попробуйте позже.",
-    MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE => "Я пока не знаю факторов влияющих на клёв. Попробуйте позже."
+    MESSAGE_PREDICT_ERROR_FACTORS_NOT_AVALIABLE => "Я пока не знаю факторов влияющих на клёв. Попробуйте позже.",
+    FACTOR_TEMPLATE_ALL => "{best_period_1} для {best_fish_1} {good_factors_1}, {bad_factors_1}. Для {best_fish_2} {good_factors_2}, {bad_factors_2}.",
+    FACTOR_TEMPLATE_FISH => "{best_period_1} для {best_fish_1} {good_factors_1}, {bad_factors_1}.",
 ];
 
 const MESSAGE_EXACT_FISH_BEST_PERIOD = [MESSAGE_BEST_FIRST, QUESTION_WANT_KNOW_CONDITIONS ];
@@ -116,7 +122,6 @@ $PERDICT_ERRORS = [
 ];
 
 
-
 function get_message_template(&$intent,$with_question=false)
 {
     global $DIALOGS, $logger, $messages_ru;
@@ -177,7 +182,10 @@ try {
         case AliceDialogs::CONFIRM:
             $intent = $processor->session_to_intent($request->session());
             if($intent['cmd']=='factor'){
-                $answer = $processor->build_fish_predict_factors($intent);
+                $factor_template = $intent['code'] & 0x3 == 0 ? FACTOR_TEMPLATE_ALL  : FACTOR_TEMPLATE_FISH;
+                $factors = $processor->build_fish_predict_factors($intent);
+                $vars = build_factor_vars($processor->build_fish_predict_factors($intent),$factor_template);
+                $answer = strtr($factor_template,$vars);
                 break;
             }
             // Otherwise command == predict, continue to default processor
@@ -192,6 +200,7 @@ try {
 
 }catch(AliceDialogsFishPredictException $exp){
     $logger->error($exp->getMessage());
+    $logger->error("Code : " . $exp->getCode());
     $answer =  $messages_ru[$PERDICT_ERRORS[$exp->getCode()]];
 }catch(Exception $exp){
     $logger->error($exp->getMessage());
